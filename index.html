@@ -359,8 +359,8 @@ body.is-mobile .ftabs{flex-wrap:nowrap;overflow-x:auto}
 <script>
 // ═══ CONFIGURACIÓN GITHUB PAGES ═══════════════════════════
 // Reemplaza YOUR_SCRIPT_ID con el ID de tu despliegue de Apps Script
-var API_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
-var DEMO    = API_URL.includes('YOUR_SCRIPT_ID'); // false cuando configures el ID real
+var API_URL = 'https://script.google.com/macros/s/AKfycbzGh43cED_fjzxyd5_2Tp9okNI_ILtRuc0Tr6EtK9ETEwtOtZnntYJhwkukie9rMQdJ/exec';
+var DEMO    = API_URL.includes('AKfycbzGh43cED_fjzxyd5_2Tp9okNI_ILtRuc0Tr6EtK9ETEwtOtZnntYJhwkukie9rMQdJ'); // false cuando configures el ID real
 
 // ── Estado global ─────────────────────────────────────────────
 var S = {
@@ -412,6 +412,7 @@ var DEMO_RESULTS = [
   {referencia:'BONG0003',nombre:'BONGO LP MATADOR CAFE',um:'UND',bodega:'005',siesa:2,fisico:3,diferencia:1,estado:'sobrante'},
 ];
 var MC = { q:'', item:null, qty:'', saved:{}, matches:[] };
+var FLT = { marca:'', tipo:'', marcasDisp:[], tiposDisp:[] }; // filtros auditor
 
 var DEMO_STATS = {total:10,coincidencias:2,faltantes:6,sobrantes:2,exactitud:20,tienda:'Valledupar (005)',fecha:'16/06/2026 09:14',id:'DEMO0001'};
 
@@ -879,6 +880,14 @@ function renderResults() {
           ${tab('sobrante','🟡 Sobrantes','#B45309','#FFFBEB')}
           ${tab('coincidencia','🟢 Coincidencias','#15803D','#F0FDF4')}
         </div>
+        <select onchange="FLT.marca=this.value;render()" style="padding:5px 8px;border:1px solid #D1D5DB;border-radius:7px;font-size:12px;color:#374151;max-width:130px">
+          <option value="">Todas las marcas</option>
+          ${FLT.marcasDisp.map(function(m){return '<option value="'+m+'"'+(FLT.marca===m?' selected':'')+'>'+m+'</option>';}).join('')}
+        </select>
+        <select onchange="FLT.tipo=this.value;render()" style="padding:5px 8px;border:1px solid #D1D5DB;border-radius:7px;font-size:12px;color:#374151;max-width:130px">
+          <option value="">Todos los tipos</option>
+          ${FLT.tiposDisp.map(function(t){return '<option value="'+t+'"'+(FLT.tipo===t?' selected':'')+'>'+t+'</option>';}).join('')}
+        </select>
         <button class="btn-exp" onclick="doExport()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Exportar Excel
@@ -1189,6 +1198,23 @@ function confirmarFirmaCanvas() {
 // ════════════════════════════════════════════════════════════
 // HELPERS
 // ════════════════════════════════════════════════════════════
+
+function getTipoFromRef(ref) {
+  var PREFIJOS = {
+    'ACOP':'Accesorios','ACOR':'Acordeones','ADAP':'Adaptadores',
+    'AFIN':'Afinadores','AMPL':'Amplificadores','BAQU':'Baquetas',
+    'BAJO':'Bajos','BATE':'Baterias','BONG':'Bongos','CABI':'Cabinas',
+    'CABL':'Cables','CAJA':'Cajas','CAMP':'Campanas','CLAV':'Claves',
+    'CORD':'Cuerdas','EFEC':'Efectos','GUIT':'Guitarras','GUIR':'Guiros',
+    'HEAD':'Audifonos','MICR':'Microfonos','PIAN':'Pianos',
+    'PERC':'Percusion','SAXO':'Saxofones','SOPO':'Soportes',
+    'TROM':'Trombones','TRUM':'Trompetas','VIOL':'Violin',
+    'XILO':'Xilofono','ZAMP':'Zampona',
+  };
+  var pref = ref ? ref.substring(0,4).toUpperCase() : '';
+  return PREFIJOS[pref] || 'Otros';
+}
+
 function counts() {
   return {
     all:          S.results.length,
@@ -1202,6 +1228,8 @@ function filtered() {
   var d = S.results;
   if (S.filter !== 'all') d = d.filter(function(r){return r.estado===S.filter;});
   if (S.search.trim()) { var q=S.search.toLowerCase(); d=d.filter(function(r){return r.referencia.toLowerCase().includes(q)||r.nombre.toLowerCase().includes(q);}); }
+  if (FLT.marca) d = d.filter(function(r){ return r.nombre && r.nombre.toUpperCase().includes(FLT.marca.toUpperCase()); });
+  if (FLT.tipo)  d = d.filter(function(r){ return getTipoFromRef(r.referencia) === FLT.tipo; });
   return d.slice().sort(function(a,b){
     var v=S.sortD==='asc'?1:-1;
     if(a[S.sortK]<b[S.sortK])return -v;
@@ -1244,7 +1272,18 @@ function setStep2Mode(mode) {
     S.conteoLoading = true;
     render();
     callServer('serverGetCatalogo', [''], function(res) {
-      if (res.ok) S.conteoItems = res.items;
+      if (res.ok) {
+        var items = res.items;
+        // Bodega: filtrar por marcas asignadas (bodega_admin ve todo)
+        if (S.session && S.session.rol === 'bodega' && S.session.marcas) {
+          var mis = S.session.marcas.split(',').map(function(m){ return m.trim().toLowerCase(); });
+          items = items.filter(function(i){
+            var nom = i.nombre.toLowerCase();
+            return mis.some(function(m){ return m && nom.includes(m); });
+          });
+        }
+        S.conteoItems = items;
+      }
       callServer('serverGetLastConteo', [S.tiendaActual], function(res2) {
         if (res2.ok) S.conteoLastConteo = res2.conteo;
         S.conteoLoading = false;
@@ -1296,6 +1335,11 @@ function compare() {
       S.results = res.results;
       S.stats   = res.stats;
       S.step    = 3;
+      // Cargar filtros disponibles
+      callServer('serverGetMarcasDisponibles', [], function(mres) {
+        if (mres.ok) { FLT.marcasDisp = mres.marcas; FLT.tiposDisp = mres.tipos; FLT.marca=''; FLT.tipo=''; }
+        render();
+      });
       document.getElementById('hd-sep').style.display = '';
       document.getElementById('hd-crumb').textContent = 'Resultados';
       render();
