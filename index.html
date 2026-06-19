@@ -1126,14 +1126,35 @@ function renderMiConteo() {
         <strong>${op}</strong> · ${tienda} · Periodo ${S.periodoActual}<br>
         <span style="font-size:11px;color:#6B7280">Al confirmar, este conteo quedará bloqueado y firmado. No podrá modificarse.</span>
       </div>
-      <button class="btn btn-red" onclick="firmarYEnviarConteo()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        Firmar y enviar
-      </button>
+ <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="guardarBorradorDesktop()">
+          💾 Guardar borrador
+        </button>
+        <button class="btn btn-red" onclick="firmarYEnviarConteo()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Firmar y enviar
+        </button>
+      </div>
     </div>
   </div>`;
 }
-
+function guardarBorradorDesktop() {
+  var inputs = document.querySelectorAll('.qty-input');
+  var items  = [];
+  inputs.forEach(function(inp) {
+    var val = parseFloat(inp.value);
+    if (!isNaN(val) && val >= 0) items.push({referencia: inp.dataset.ref, cantidad: val});
+  });
+  if (!items.length) { toast('Ingresa al menos una cantidad antes de guardar borrador', 'error'); return; }
+  toast('Guardando borrador...');
+  callServer('serverSaveDraft',
+    [items, S.tiendaActual, S.periodoActual, S.session ? S.session.nombre : ''],
+    function(res) {
+      if (res.ok) toast('✓ Borrador guardado — ' + res.saved + ' ítems. Puedes continuar después.');
+      else toast('Error: ' + res.error, 'error');
+    }
+  );
+}
 function firmarYEnviarConteo() {
   var items = [];
   if (isMobile()) {
