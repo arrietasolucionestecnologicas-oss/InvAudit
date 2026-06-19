@@ -425,17 +425,33 @@ function callServer(fnName, args, onSuccess, onError) {
   var errFn = onError || function(e){ toast('Error: ' + e.message, 'error'); };
   if (DEMO) { simulateDemoServer(fnName, args, onSuccess); return; }
 
-  var url = API_URL
-    + '?action=' + encodeURIComponent(fnName)
-    + '&p='      + encodeURIComponent(JSON.stringify(args || []));
+  // Uploads usan POST — archivos base64 superan límite de URL en GET
+  var usePost = fnName === 'serverUploadSiesa' || fnName === 'serverUploadFisico';
 
-  fetch(url, { redirect: 'follow' })
+  if (usePost) {
+    fetch(API_URL, {
+      method: 'POST',
+      redirect: 'follow',
+      body: JSON.stringify({ action: fnName, params: args || [] })
+    })
     .then(function(r) {
       if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + r.statusText);
       return r.json();
     })
     .then(onSuccess)
     .catch(function(err) { errFn({ message: err.message }); });
+  } else {
+    var url = API_URL
+      + '?action=' + encodeURIComponent(fnName)
+      + '&p='      + encodeURIComponent(JSON.stringify(args || []));
+    fetch(url, { redirect: 'follow' })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + r.statusText);
+        return r.json();
+      })
+      .then(onSuccess)
+      .catch(function(err) { errFn({ message: err.message }); });
+  }
 }
 
 function simulateDemoServer(fn, args, cb) {
