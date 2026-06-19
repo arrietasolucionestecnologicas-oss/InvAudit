@@ -1797,7 +1797,27 @@ function renderMiConteoMobile() {
       }
       ${pendienteCards}
       ${masInfo}
-      ${recentHtml}
+${recentHtml}
+      <div style="margin-top:20px;border-top:1px solid #dee2e6;padding-top:14px">
+        <button onclick="MC.addingNew=!MC.addingNew;updateMobConteo()"
+          class="btn btn-outline-secondary w-100 fw-semibold" style="font-size:14px">
+          ${MC.addingNew ? '✕ Cancelar' : '+ Agregar ítem que no está en catálogo'}
+        </button>
+        ${MC.addingNew ? `<div class="d-flex flex-column gap-2 mt-3">
+          <input id="mob-ni-ref" class="form-control form-control-lg"
+            placeholder="Referencia (ej: GUIT0099)"
+            oninput="this.value=this.value.toUpperCase()">
+          <input id="mob-ni-nom" class="form-control form-control-lg"
+            placeholder="Descripción del producto">
+          <input id="mob-ni-cant" class="form-control form-control-lg text-center fw-bold"
+            type="number" inputmode="numeric" min="0" placeholder="Cantidad"
+            style="font-size:22px">
+          <button onclick="agregarItemNuevoMobile()"
+            class="btn btn-danger btn-lg fw-bold py-3" style="font-size:17px">
+            ✓ Agregar al conteo
+          </button>
+        </div>` : ''}
+      </div>
     </div>`;
   }
 
