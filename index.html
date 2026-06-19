@@ -990,7 +990,7 @@ function renderTiendas() {
 // VISTAS TIENDA
 // ════════════════════════════════════════════════════════════
 function loadMiConteo() {
-  if (!S.session || S.session.rol !== 'tienda') return;
+  if (!S.session || S.session.rol === 'auditor') return; // bodega, tienda_admin y tienda pueden contar
   S.tiendaActual = S.session.tienda;
   MC = { q:'', item:null, qty:'', saved:{}, matches:[] }; // reset mobile state
 
