@@ -1006,7 +1006,18 @@ function loadMiConteo() {
     if (res.estado === 'cerrado') { S.conteoLoading = false; render(); return; }
 
     callServer('serverGetCatalogo', [''], function(res2) {
-      if (res2 && res2.ok) S.conteoItems = res2.items || [];
+      if (res2 && res2.ok) {
+        var items = res2.items || [];
+        // Bodega: filtrar por marcas asignadas al operador
+        if (S.session && S.session.rol === 'bodega' && S.session.marcas) {
+          var mis = S.session.marcas.split(',').map(function(m){ return m.trim().toLowerCase(); });
+          items = items.filter(function(i){
+            var nom = i.nombre.toLowerCase();
+            return mis.some(function(m){ return m && nom.includes(m); });
+          });
+        }
+        S.conteoItems = items;
+      }
       callServer('serverGetLastConteo', [S.tiendaActual, S.periodoActual], function(res3) {
         if (res3 && res3.ok) {
           S.conteoLastConteo = res3.conteo || {};
