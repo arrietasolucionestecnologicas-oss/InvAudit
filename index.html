@@ -6,7 +6,6 @@
 <meta name="author" content="Gerson Arrieta — A.S.T Arrieta Soluciones Tecnológicas">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <!-- © Gerson Arrieta | A.S.T Arrieta Soluciones Tecnológicas -->
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 <title>InvAudit — A.S.T</title>
 <base target="_top">
 <style>
@@ -360,7 +359,7 @@ body.is-mobile .ftabs{flex-wrap:nowrap;overflow-x:auto}
 <script>
 // ═══ CONFIGURACIÓN GITHUB PAGES ═══════════════════════════
 // Reemplaza YOUR_SCRIPT_ID con el ID de tu despliegue de Apps Script
-var API_URL = 'https://script.google.com/macros/s/AKfycbzGh43cED_fjzxyd5_2Tp9okNI_ILtRuc0Tr6EtK9ETEwtOtZnntYJhwkukie9rMQdJ/exec';
+var API_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
 var DEMO    = API_URL.includes('YOUR_SCRIPT_ID'); // false cuando configures el ID real
 
 // ── Estado global ─────────────────────────────────────────────
@@ -417,6 +416,8 @@ var DEMO_RESULTS = [
 var MC = { q:'', item:null, qty:'', saved:{}, matches:[] };
 var FLT = { marca:'', tipo:'', marcasDisp:[], tiposDisp:[] }; // filtros auditor
 
+var DEMO_STATS = {total:10,coincidencias:2,faltantes:6,sobrantes:2,exactitud:20,tienda:'Valledupar (005)',fecha:'16/06/2026 09:14',id:'DEMO0001'};
+
 // ════════════════════════════════════════════════════════════
 // CALL SERVER — GitHub Pages → Apps Script API
 // ════════════════════════════════════════════════════════════
@@ -446,10 +447,12 @@ function simulateDemoServer(fn, args, cb) {
       else cb({ok:false, error:'Usuario o contraseña incorrectos.'});
     }
     else if (fn === 'serverGetCatalogo') cb({ok:true, items: DEMO_RESULTS.map(function(r){return {referencia:r.referencia,nombre:r.nombre,um:r.um};})});
-    else if (fn === 'serverGetLastConteo') { var c={}; DEMO_RESULTS.forEach(function(r){c[r.referencia]=r.fisico;}); cb({ok:true,conteo:c}); }
+
     else if (fn === 'serverGetPeriodoStatus') cb({ok:true, estado:'abierto'});
     else if (fn === 'serverGetAllPeriodosStatus') { var st={}; S.tiendas.forEach(function(t){st[t.nombre]='abierto';}); st['Valledupar']='cerrado'; cb({ok:true,status:st}); }
     else if (fn === 'serverSaveConteoManual') cb({ok:true, mensaje:'Periodo cerrado correctamente (demo)'});
+    else if (fn === 'serverSaveDraft') cb({ok:true, saved:(args[0]||[]).length});
+    else if (fn === 'serverGetLastConteo') { var c={}; DEMO_RESULTS.forEach(function(r){c[r.referencia]=r.fisico;}); cb({ok:true, conteo:c, isDraft:false}); return; }
     else if (fn === 'serverRunComparison') cb({ok:true, stats:DEMO_STATS, results:DEMO_RESULTS});
     else if (fn === 'serverGetHistorial') cb([{id:'DEMO0001',fecha:'16/06/2026',tienda:'Valledupar',total:10,coincidencias:2,faltantes:6,sobrantes:2,exactitud:'20%'}]);
     else if (fn === 'serverGetUsuarios') cb({ok:true, items:[
@@ -529,7 +532,7 @@ function showApp() {
 // NAV
 // ════════════════════════════════════════════════════════════
 var NAV_AUDITOR = [
-  {view:'home',     label:'Inicio',            icon:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10'},
+  {view:'home',     label:'Inicio',           icon:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10'},
   {view:'compare',  label:'Nueva comparación',icon:'M22 12 18 12 15 21 9 3 6 12 2 12'},
   {view:'historial',label:'Historial',         icon:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 6v6l4 2'},
   {view:'tiendas',  label:'Tiendas',           icon:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10'},
@@ -987,7 +990,7 @@ function renderTiendas() {
 // VISTAS TIENDA
 // ════════════════════════════════════════════════════════════
 function loadMiConteo() {
-  if (!S.session || S.session.rol === 'auditor') return; // SE CORRIGIÓ EL BLOQUEO DE ROLES SECUNDARIOS
+  if (!S.session || S.session.rol !== 'tienda') return;
   S.tiendaActual = S.session.tienda;
   MC = { q:'', item:null, qty:'', saved:{}, matches:[] }; // reset mobile state
 
@@ -1004,8 +1007,17 @@ function loadMiConteo() {
 
     callServer('serverGetCatalogo', [''], function(res2) {
       if (res2 && res2.ok) S.conteoItems = res2.items || [];
-      callServer('serverGetLastConteo', [S.tiendaActual], function(res3) {
-        if (res3 && res3.ok) S.conteoLastConteo = res3.conteo || {};
+      callServer('serverGetLastConteo', [S.tiendaActual, S.periodoActual], function(res3) {
+        if (res3 && res3.ok) {
+          S.conteoLastConteo = res3.conteo || {};
+          // Pre-popular MC.saved si hay borrador del periodo actual
+          if (res3.isDraft && Object.keys(res3.conteo||{}).length > 0) {
+            MC.saved = {};
+            Object.keys(res3.conteo).forEach(function(ref){
+              MC.saved[ref] = res3.conteo[ref];
+            });
+          }
+        }
         S.conteoLoading = false;
         render();
       }, onError);
@@ -1061,9 +1073,9 @@ function renderMiConteo() {
       </div>
       <div style="font-size:12px;color:#9CA3AF">${S.conteoItems.length} referencias en catálogo</div>
     </div>
-   <div style="display:flex;gap:10px;margin-bottom:12px">
+    <div style="display:flex;gap:10px;margin-bottom:12px">
       <div class="srch" style="flex:1"><span class="srch-ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
-        <input id="inp-search-conteo" value="${S.conteoSearch}" oninput="filtrarConteoRows(this.value)" placeholder="Buscar referencia o nombre...">
+        <input value="${S.conteoSearch}" oninput="S.conteoSearch=this.value;render()" placeholder="Buscar referencia o nombre...">
       </div>
     </div>
     <div class="tbl-card" style="margin-bottom:16px">
@@ -1614,21 +1626,58 @@ function renderMiConteoMobile() {
     </div>`;
 
   } else if (MC.matches.length > 0) {
-    var matchItems = MC.matches.slice(0,8).map(function(i) {
-      var saved = MC.saved[i.referencia] !== undefined;
-      return `<button class="list-group-item list-group-item-action py-3 d-flex align-items-center gap-3"
-        data-ref="${i.referencia}" onclick="seleccionarItemMobile(this.dataset.ref)">
-        <span class="badge bg-danger" style="min-width:80px;font-size:11px">${i.referencia}</span>
-        <span class="flex-grow-1 text-start fw-semibold" style="font-size:14px;line-height:1.3">${i.nombre}</span>
-        ${saved ? '<span class="text-success fw-bold">✓</span>' : ''}
-        <span class="text-muted">›</span>
-      </button>`;
-    }).join('');
-    var more = MC.matches.length > 8 ? `<div class="list-group-item text-center text-muted" style="font-size:13px">+${MC.matches.length-8} más — escribe más para filtrar</div>` : '';
-    central = `<div style="padding:12px 16px">
-      <p class="text-muted mb-2" style="font-size:13px">${MC.matches.length} resultados para "<strong>${MC.q}</strong>"</p>
-      <div class="list-group shadow-sm">${matchItems}${more}</div>
-    </div>`;
+    if (MC.matches.length <= 6) {
+      // 2-6 resultados: mini-tarjetas con input directo
+      var multiCards = MC.matches.map(function(item) {
+        var prev  = S.conteoLastConteo[item.referencia] || 0;
+        var saved = MC.saved[item.referencia] !== undefined;
+        var val   = saved ? MC.saved[item.referencia] : '';
+        return `<div class="card border-0 shadow-sm mb-2">
+          <div class="card-body py-2 px-3">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="badge bg-danger" style="font-size:11px">${item.referencia}</span>
+              ${saved ? '<span class="badge bg-success">✓ '+MC.saved[item.referencia]+'</span>' : ''}
+              <small class="text-muted ms-auto">${item.um||'UND'}</small>
+            </div>
+            <p class="fw-semibold mb-0" style="font-size:13px;line-height:1.3">${item.nombre}</p>
+            <small class="text-muted">Ant: <strong>${prev}</strong></small>
+          </div>
+          <div class="card-footer bg-transparent border-top-0 d-flex gap-2 pb-2 px-3">
+            <button onclick="decQtyCard('${item.referencia}')" class="btn btn-outline-danger fw-bold"
+              style="width:44px;height:44px;border-radius:50%;font-size:20px;line-height:1;flex-shrink:0">−</button>
+            <input id="qty-card-${item.referencia}" type="number" inputmode="numeric" min="0"
+              class="form-control text-center fw-bold"
+              style="height:44px;font-size:22px;border:2px solid #dee2e6;border-radius:8px"
+              placeholder="${prev||0}" value="${val}">
+            <button onclick="incQtyCard('${item.referencia}')" class="btn btn-danger fw-bold"
+              style="width:44px;height:44px;border-radius:50%;font-size:20px;line-height:1;flex-shrink:0">+</button>
+            <button onclick="guardarDesdeCard('${item.referencia}')" class="btn btn-success fw-bold"
+              style="height:44px;flex:1;font-size:14px;border-radius:8px">✓</button>
+          </div>
+        </div>`;
+      }).join('');
+      central = `<div style="padding:12px 16px">
+        <p class="text-muted mb-2" style="font-size:13px">${MC.matches.length} resultados para "<strong>${MC.q}</strong>"</p>
+        ${multiCards}
+      </div>`;
+    } else {
+      // 7+ resultados: lista para seleccionar
+      var matchItems = MC.matches.slice(0,8).map(function(i) {
+        var saved = MC.saved[i.referencia] !== undefined;
+        return `<button class="list-group-item list-group-item-action py-3 d-flex align-items-center gap-3"
+          data-ref="${i.referencia}" onclick="seleccionarItemMobile(this.dataset.ref)">
+          <span class="badge bg-danger" style="min-width:80px;font-size:11px">${i.referencia}</span>
+          <span class="flex-grow-1 text-start fw-semibold" style="font-size:14px;line-height:1.3">${i.nombre}</span>
+          ${saved ? '<span class="text-success fw-bold">✓</span>' : ''}
+          <span class="text-muted">›</span>
+        </button>`;
+      }).join('');
+      var more2 = MC.matches.length > 8 ? `<div class="list-group-item text-center text-muted" style="font-size:13px">+${MC.matches.length-8} más — escribe más para filtrar</div>` : '';
+      central = `<div style="padding:12px 16px">
+        <p class="text-muted mb-2" style="font-size:13px">${MC.matches.length} resultados — escribe más para filtrar</p>
+        <div class="list-group shadow-sm">${matchItems}${more2}</div>
+      </div>`;
+    }
 
   } else if (MC.q) {
     central = `<div class="d-flex flex-column align-items-center justify-content-center" style="padding:48px 20px;text-align:center">
@@ -1691,7 +1740,13 @@ function renderMiConteoMobile() {
         </div>` : '';
 
     central = `<div style="padding:14px 16px">
-      ${savedCount2 === 0 ? '<p class="text-muted mb-3" style="font-size:13px">Ingresa la cantidad de cada ítem y toca <strong>Guardar</strong>. Usa el buscador para ir directo a cualquier referencia.</p>' : ''}
+      ${savedCount2 > 0
+        ? `<div class="alert alert-warning d-flex align-items-center gap-2 py-2 mb-3" style="font-size:13px">
+            <span style="font-size:20px">📝</span>
+            <span><strong>Borrador guardado</strong> — ${savedCount2} ítems registrados. Continúa y firma cuando termines.</span>
+           </div>`
+        : '<p class="text-muted mb-3" style="font-size:13px">Ingresa la cantidad de cada ítem y toca <strong>Guardar</strong>. Usa el buscador para ir directo a cualquier referencia.</p>'
+      }
       ${pendienteCards}
       ${masInfo}
       ${recentHtml}
@@ -1708,7 +1763,14 @@ function renderMiConteoMobile() {
       <div class="progress-bar bg-danger" style="width:${pct}%"></div>
     </div>
     ${savedCount > 0
-      ? `<div class="d-grid"><button class="btn btn-danger btn-lg fw-bold py-3" style="font-size:17px" onclick="firmarYEnviarConteo()">🔒 &nbsp;Firmar y enviar (${savedCount} ítems)</button></div>`
+      ? `<div class="d-grid gap-2">
+          <button class="btn btn-outline-secondary fw-bold py-2" style="font-size:14px" onclick="guardarBorradorMobile()">
+            💾 Guardar borrador — continuar después
+          </button>
+          <button class="btn btn-danger btn-lg fw-bold py-3" style="font-size:17px" onclick="firmarYEnviarConteo()">
+            🔒 &nbsp;Firmar y enviar (${savedCount} ítems)
+          </button>
+        </div>`
       : `<div class="text-center text-muted" style="font-size:13px;padding:6px 0">Guarda ítems para poder firmar</div>`
     }
   </div>`;
@@ -1775,6 +1837,25 @@ function decQtyCard(ref) {
   inp.value = Math.max(0, (parseFloat(inp.value) || 0) - 1);
 }
 
+
+function guardarBorradorMobile() {
+  var items = Object.keys(MC.saved).map(function(ref) {
+    return { referencia: ref, cantidad: MC.saved[ref] };
+  });
+  if (!items.length) { toast('No hay ítems guardados todavía', 'error'); return; }
+  toast('Guardando borrador...');
+  callServer('serverSaveDraft',
+    [items, S.tiendaActual, S.periodoActual, S.session ? S.session.nombre : ''],
+    function(res) {
+      if (res.ok) {
+        toast('✓ Borrador guardado — ' + res.saved + ' ítems. Puedes continuar mañana.');
+      } else {
+        toast('Error al guardar borrador: ' + res.error, 'error');
+      }
+    }
+  );
+}
+
 function guardarItemMobile() {
   if (!MC.item) return;
   var inp = document.getElementById('mob-qty-inp');
@@ -1837,7 +1918,7 @@ function loadGestion() {
   G.loading = true; render();
   callServer('serverGetUsuarios', [], function(res) {
     if (res.ok) G.usuarios = res.items;
-    callServer('serverGetCatalogo', [''], function(res2) {
+    callServer('serverGetCatalogo', [G.catSearch], function(res2) {
       if (res2.ok) G.catalogo = res2.items;
       G.loading = false; render(); bindGestion();
     });
@@ -1918,12 +1999,7 @@ function renderGestionUsuarios() {
 }
 
 function renderGestionCatalogo() {
-  var q = G.catSearch.toLowerCase();
-  var filtrados = G.catalogo.filter(function(i) {
-    return !q || i.referencia.toLowerCase().includes(q) || i.nombre.toLowerCase().includes(q);
-  });
-
-  var rows = filtrados.slice(0,80).map(function(item, i) {
+  var rows = G.catalogo.slice(0,80).map(function(item, i) {
     var bg = i%2===0?'#fff':'#F9FAFB';
     return `<div class="cat-row" style="background:${bg}">
       <span style="font-weight:700;font-variant-numeric:tabular-nums">${item.referencia}</span>
@@ -1935,7 +2011,7 @@ function renderGestionCatalogo() {
     </div>`;
   }).join('');
 
-  var more = filtrados.length > 80 ? `<div style="text-align:center;padding:10px;font-size:11px;color:#9CA3AF">Mostrando 80 de ${filtrados.length} — usa el buscador</div>` : '';
+  var more = G.catalogo.length > 80 ? `<div style="text-align:center;padding:10px;font-size:11px;color:#9CA3AF">Mostrando 80 de ${G.catalogo.length} — usa el buscador</div>` : '';
 
   var form = G.showAddProd ? `<div class="card card-pad" style="margin-top:16px">
     <div style="font-size:14px;font-weight:700;margin-bottom:14px">Agregar producto</div>
@@ -1953,7 +2029,7 @@ function renderGestionCatalogo() {
   return `<div>
     <div style="display:flex;gap:10px;margin-bottom:12px">
       <div class="srch" style="flex:1"><span class="srch-ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
-        <input id="s-inp" value="${G.catSearch}" oninput="G.catSearch=this.value;render()" placeholder="Buscar referencia o nombre...">
+        <input value="${G.catSearch}" oninput="G.catSearch=this.value;filtrarCatalogo()" placeholder="Buscar referencia o nombre...">
       </div>
       <button class="btn btn-red" onclick="G.showAddProd=!G.showAddProd;render()">+ Agregar producto</button>
     </div>
@@ -2018,6 +2094,13 @@ function inactivarProducto(ref) {
   });
 }
 
+function filtrarCatalogo() {
+  callServer('serverGetCatalogo', [G.catSearch], function(res) {
+    if (res.ok) { G.catalogo = res.items; render(); }
+  });
+}
+
+
 // ════════════════════════════════════════════════════════════
 // MÓVIL
 // ════════════════════════════════════════════════════════════
@@ -2036,7 +2119,7 @@ function closeMobileNav() {
 function updateMobileHeader() {
   if (!S.session) return;
   var title = TITLES[S.view] || S.view;
-  var sub   = S.session.rol === 'auditor' ? 'Auditor' : 'Tienda: ' + S.session.tienda;
+  var sub   = S.session.rol === 'tienda' ? 'Tienda: ' + S.session.tienda : 'Auditor';
   var mbt = document.getElementById('mb-title');
   var mbs = document.getElementById('mb-sub');
   if (mbt) mbt.textContent = title;
